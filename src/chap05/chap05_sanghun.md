@@ -285,3 +285,69 @@ Optional<Dish> dish = menu.stream()
 #### findFirst 와 findAny는 언제 사용하나
 병렬 실행에서는 첫 번째 요소를 찾기가 어려워 요소의 반환순서가 상관없다면 병렬 스트림에서는 제약이 적은 findAny를 사용한다
 
+### 리듀싱
+모든 스트림 요소를 처리해서 값으로 도출하는것(함수형 프로그래밍에선 폴드라고 부른다)
+
+#### 요소의 합
+```` java
+for-each 루프를 이용해 리스트의 숫자를 더하는 코드
+
+int snum = 0;
+for (int x : numbers) {
+  sum += x;
+}
+
+numbers의 각 요소는 결과에 반복적으로 더해진다
+리스트에서 하나의 숫자가 남을 때까지 reduce 과정을 반복한다
+
+코드에는 파라미터 두 개 사용
+
+- sum 변수의 초기값 0
+- 리스트의 모든 요소를 조합하는 연산(+)
+
+위 코드에서 모든 숫자를 곱하는 연산을 구현하려면 복붙해서 조금 바꿔야 할 것이다
+그렇게 하지 않고 reduce를 이용해 반복된 패턴을 추상화 가능하다
+
+reduce를 이용해서 스트림의 모든 요소 더하는 코드
+
+int sum = numbers.stream().reduce(0, (a, b) -> a + b);
+
+reduce는 두 개의 인수를 가진다
+
+- 초기값 0
+- 두 요소를 조합해서 새로운 값을 만드는 BinaryOperator<T>, 여기선 람다로 (a,b) -> a + b 사용
+
+이제 숫자를 곱하는 연산으로 바꾸는 경우 reduce로 다른 람다를 던져주면 쉽게 변경 가능하다
+
+int product = numbers.stream().reduce(1, (a, b) -> a * b);
+
+더하기 같은 경우 Integer에는 sum 메서드가 있으니 메서드 참조를 사용하면 조금 더 간편해진다
+
+int sum = numbers.stream().reduce(0, Integer::sum);
+
+초기값이 없는 reduce도 있는데 합계가 없음을 나타낼 수 있도록 Optional 객체를 반환한다
+
+Optional<Integer> sum = numbers.stream().reduce((a, b) -> (a + b));
+
+````
+#### 최댓값과 최솟값
+```` java
+reduce를 이용해서 스트림에서 최댓값과 최솟값을 찾을 수 있다
+
+reduce는 두 인수를 받는다
+
+- 초깃값
+- 스트림의 두 요소를 합쳐서 하나의 값으로 만드는데 사용할 람다
+
+Optional<Integer> max = numbers.stream().reduce(Integer::max);  //min을 던져주면 최솟값
+
+reduce 연산은 새로운 값을 이용해 스트림의 모든 요소를 소비할 때까지 람다를 반복 수행하면서 최댓값을 생산한다
+
+````
+
+#### reduce 메서드의 장점과 병렬화
+* reduce를 쓰면 내부 반복이 추상화 되면서 내부 구현에서 병렬로 reduce를 실행 가능하다
+  * 반복적인 합계에서는 sum 변수를 공유 하기 때문에 병렬화 하기가 어렵다
+  * 강제적으로 동기화해도 병렬화로 얻어야 할 이득이 스레드 간 소모적인 경쟁 때문에 상쇄되어 버린다
+* 중요한건 가변 누적자 패턴은 병렬화와 거리가 너무 먼 기법이다
+
