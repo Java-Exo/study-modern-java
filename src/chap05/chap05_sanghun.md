@@ -351,3 +351,141 @@ reduce 연산은 새로운 값을 이용해 스트림의 모든 요소를 소비
   * 강제적으로 동기화해도 병렬화로 얻어야 할 이득이 스레드 간 소모적인 경쟁 때문에 상쇄되어 버린다
 * 중요한건 가변 누적자 패턴은 병렬화와 거리가 너무 먼 기법이다
 
+### 숫자형 스트림
+
+```` java
+reduce 메서드로 스트림 요소의 합을 구하는 예제
+- 메뉴의 칼로리 합계를 계산할 수 있다
+
+int calories = menu.stream()
+                    .map(Dish::getCalories)
+                    .reduce(0, Integer::sum);
+                    
+위 코드에는 박싱 비용이 숨어있다
+내부적으로 합계를 계산하기 전에 Integer를 기본형으로 언박싱 해야한다
+아래처럼 sum을 직접 호출하면 더 좋았겠지만 map 메서드가 Stream<T>를 생성하기 때문에 sum 메서드가 없어서 불가능하다
+int calories = menu.stream()
+                    .map(Dish::getCalories)
+                    .sum(); //map이 반환하는 객체에 sum이 없어서 실제로는 불가능한 코드
+그렇다면 왜 sum이 없을까??
+Stream<커맨드객체> 형식의 요소라면 sum이라는 연산을 수행 불가능 하기 때문이다
+하지만 스트림 API는 숫자 스트림을 효율적으로 처리할 수 있도록 기본형 특화 스트림을 제공한다                    
+````
+
+#### 기본형 특화 스트림
+* 자바에서는 세가지 기본형 특화 스트림을 제공한다
+* 스트림 API는 박싱 비용을 피할 수 있도록 int 요소에 특화된 IntStream, double 요소에 특화된 DoubleStream, long 요소에 특화된 LongStream을 제공한다
+* 각각의 인터페이스는 숫자 스트림의 합계를 계산하는 sum, 최댓값 요소를 검색하는 max 같이 자주 사용하는 숫자 관련 리듀싱 연산 수행 메서드를 제공한다
+* 또한 필요할때 다시 객체 스트림으로 복원하는 기능도 제공한다
+* 특화 스트림은 오직 박싱 과정에서 일어나는 효율성과 관련 있으며 스트림에 추가 기능을 제공하지는 않는다
+
+숫자 스트림으로 매핑
+* 스트림을 특화 스트림으로 변환할 때는 mapToInt, mapToDouble, mapToLong 세 가지 메서드를 가장 많이 사용한다
+* 이들 메서드는 map과 정확히 같은 기능을 수행하지만 Stream<T>대신 특화된 스트림을 반환한다
+```` java
+int calories = menu.stream()                      //Stream<Dish> 반환
+                    .mapToInt(Dish::getcalories)  //IntStream 반환
+                    .sum();
+````
+* mapToInt 메서드는 각 요리에서 모든 칼로리(Integer 형식)를 추출한 다음에 IntStream을 반환한다
+* 따라서 IntStream 인터페이스에서 제공하는 sum 메서드를 이용해서 칼로리 합계를 계산할 수 있다
+* 스트림이 비어있으면 sum은 기본값 0을 반환한다
+* IntStream은 max,min,average 등 다양한 유틸리티 메서드도 지원한다
+
+객체스트림으로 복원하기
+* 객체 스트림으로 복원하려면 스트림 인터페이스에 정의된 일반적인 연산을 사용해야 한다
+```` java
+IntStream intStream = menu.stream().mapToInt(Dish::getCalories);  //스트림을 숫자 스트림으로 변환
+Stream<Integer> stream = intStream.boxed();                       //숫자 스트림을 스트림으로 변환
+
+````
+
+기본값 :  OptionalInt
+* 기본값이 없을때 스트림에 요소가 없는 상황과 실제 반환값(최댓값 등..)이 0인 상황을 구별할 수 있다
+* OptionalInt를 이용해서 반환값(최댓값)이 없는 상황에서 사용할 기본값을 명시적으로 지정 가능하다
+```` java
+OptionalInt를 이옹해서 IntStream의 최댓값 요소 찾기
+
+OptionalInt maxCalories = menu.stream()
+                               .mapToInt(Dish::getCalories)
+                               .max();
+OptionalInt를 이용해서 최댓값이 없는 상황에 사용할 기본값을 명시적으로 정의 가능
+int max = maxCalories.orElse(1);  //값이 없을때 기본 최댓값을 명시적으로 설정
+````
+#### 숫자범위
+* 프로그램에서는 특정 범위의 숫자를 이용해야 하는 상황이 자주 발생한다
+```` java
+1 에서 100 사이의 숫자를 생성하려면 자바 8의 IntStream과 LongStream에서는 range와 rangeClosed라는 두 가지 정적 메서드를 제공한다
+두 메서드 모두 첫 번째 인수로 시작값을, 두 번째 인수로 종료값을 가진다
+range 메서드는 시작값과 종료값이 결과에 포함되지 않는다
+rangeClosed는 시작값과 종료값이 결과에 포함된다
+
+IntStream evenNumbers = IntStream.rangeClosed(1, 100)       //1~100의 범위를 나타낸다
+                                  .filter(n -> n % 2 == 0);
+System.out.println(evenNumbers.count());                    //1부터 100까지에는 50개의 짝수가 있다
+
+위 코드처럼 rangeClosed를 이용해서 1부터 100까지의 숫자를 만들 수 있다
+rangeClosed의 결과는 스트림으로 filter 메서드를 이용해서 짝수만 필터링할 수 있다
+filter를 호출해도 실제로는 아무 계산도 이루어지지 않는다
+최종적으로 결과 스트림에 count를 호출한다
+````
+
+### 스트림 만들기
+#### 값으로 스트림 만들기
+* 임의의 수를 인수로 받는 정적 메서드 Stream.of 이용해서 스트림을 만들 수 있다
+* 예를 들어 다음 코드는 Stream.of로 문자열 스트림을 만드는 예제다
+* 스트림의 모든 문자열을 대문자로 변환한 후 문자열을 하나씩 출력한다
+```` java
+Stream<String> stream = Stream.of("Modern", "Java", "In", "Action");
+stream.map(String::toUpperCase).forEach(System.out.println);
+
+다음 처럼 empyty 메서드를 이용해서 스트림을 비울 수 있다
+````
+
+#### null이 될 수 있는 객체로 스트림 만들기
+* 자바 9에서는 null이 될 수 있는 개체를 스트림으로 만들 수 있게 Stream.ofNullable을 이용해서 다음 처럼 구현 가능하다
+```` java
+명시적으로 null 확인
+
+String homeValue = System.getProperty("home");
+Stream<String> homeValueStream = homeValue == null ? Stream.empty() : Stream.of(value);
+
+
+Stream.ofNullable을 이용해 구현 가능하다
+Stream<String> homeValueStream = Stream.ofNullable(System.getProrerty("home"));
+
+null이 될 수 있는 객체를 포함하는 스트림 값을 flatMap과 함께 사용하는 상황에서 좋은 패턴
+Stream<String< values = Stream.of("config", "home", "user")
+                              .flatMap(key -> Stream.ofNullable(System.getProperty(key))
+````
+
+#### 배열로 스트림 만들기
+* 배열을 인수로 받는 정적 메서드 Arrays.stream을 이용해서 스트림을 만들 수 있다
+```` java
+기본형 int로 이루어진 배열을 IntStream으로 변환 가능
+int[] numbers = {2, 3, 5, 7, 11, 13};
+int sum = Arrays.stream(numbers).sum();
+````
+
+#### 파일로 스트림 만들기
+* 파일을 처리하는 등의 I/O 연산에 사용하는 자바의 NIO API도 스트림을 활용할 수 있도록 업데이트 되었다
+* java.nio.file.Files의 많은 정적 메서드가 스트림을 반환한다
+```` java
+
+//스트림은 자원을 자동으로 해지할 수 있는 AutoCloseable 이므로 try-finally가 필요 없다
+//Charset.defaultCharset()))
+long uniqueWords = 0;
+try(Stream<String> lines = Files.lines(Paths.get("data.txt"), Charset.defaultCharset())) {
+uniqueWords = lines.flatMap(line -> Arrays.stream(line.split(" ")))
+                  .distinct()         // 중복 제거
+                  .count();           //단어 스트림 생성
+                  
+Files.lines로 파일의 각 행 요소를 반환하는 스트림을 얻을 수 있다
+스트림의 소스가 I/O 자원이므로 이 메소드를 try/catch 블록으로 감쌌고 메모리 누수를 막으려면 자원을 닫아야 한다
+기존에는 finally 블록에서 자원을 닫았다
+Stream 인터페이스는 AutoCloseable 인터페이스를 구현해야 한다
+따라서 try 블록 내의 자원은 자동으로 관리된다
+line에 split 메서드를 호출해서 각 행의 단어를 분리할 수 있다
+각 행의 단어를 여러 스트림으로 만드는 것이 아니라 flatMap으로 스트림을 하나로 평면화했다
+마지막으로 distinct와 count를 연결해서 스트림의 고유 단어 수를 계산한다
+````
