@@ -414,8 +414,208 @@ map과 reduce를 연결하는 기법을 맵 리듀스 패턴이라 하면 쉽게
 long count = menu.stream().count();
 ```
 
+### 5.7 숫자형 스트림
+
+reduce  메서드로 스트림 요소의 합을 구하는 예제를 살펴봤다. 
+
+예를 들어 다음처럼 메뉴의 칼로리 합계를 계산할 수 있다. 
+
+``` java
+int calories = menu.stream()
+                    .map(Dish::getCalories)
+                    .reduce(0, Integer::sum);
+```
+사실 위 코드에는 박싱 비용이 숨어 있다. 내부적으로 합계를 계산하기 전에 Integer를 기본형으로 언박싱해야 한다. 
+
+``` java
+int calories = menu.stream()
+                    .map(Dish::getCalories)
+                    .sum();
+```
+하지만 위 코드처럼 sum메서드를 직접 호출할 수 없다. 
+
+map 메서드가 Stream<T>를 생성하기 때문이다. 
+
+스트림의 요소 형식은 Integer지만 인터페이스에는 sum메서드가 없다. 
+
+왜 sum메서드가 없을까? 예를 들어 menu처럼 Stream<Dish> 형식의 요소만 있다면 sum이라는 연산을 수정할 수 없기 때문이다. 
+
+다행히도 스트림 API 숫자 스트림을 효율적으로 처리할 수 있도록 **기본형 특화 스트림**을 제공한다. 
+
+
+### 5.7.1 기본형 특화 스트림
+자바 8에서는 세 가지 기본형 특화 스트림을 제공한다. 
+
+스트림 API는 박싱 비용을 피할 수 있도록 'int요소에 특화된 IntStream', 
+
+'double요소에 특화된 DoubleStream', 'long요소에 특화된 LongStream'을 제공한다. 
+
+각각의 인터페이스는 숫자 스트림의 합계를 계산하는 sum,  최댓값 요소를 검색하는 max 같이 자주 사용하는 숫자 관련 리뉴싱 연산 수행 메서드를 제공한다. 
+
+또한 필요할 때 다시 객체 스트림으로 복원하는 기능도 제공한다. 
+
+특화 스트림은 오직 박싱 과정에서 일어나는 효율성과 관련 있으며 스트림에 추가 기능을 제공하지 않은 사실을 기억하자. 
+
+
+#### 숫자 스트림으로 매핑 
+스트림을 특화 스트림으로 변환할 때는 mapToInt, mapToDouble, mapToLong 세 가지 메서드를 가장 많이 사용한다. 
+
+이들 메서드는 map과 정확히 같은 기능을 수행하지만, Stream<T> 대신 특화된 스트림을 반환한다. 
+
+``` java
+int calories = menu.stream() // Stream<Dish> 반환
+                   .mapToInt(Dish::getCalories) // IntStream 반환
+                   .sum();
+```
+mapToInt 메서드는 각 요리에서 모든 칼로리(Integer 형식)를 추출한 다음에 IntStream을 (Stream<Integer>가 아님) 반환한다.
+
+따라서 IntStream 인터페이스에서 제공하는 sum 메서드를 이용해서 칼로리 합계를 계산할 수 있다. 
+
+스트림이 비어 있으면 sum은 기본값 0을 반환한다. 
+
+
+<hr>
+
+### 객체 스트림으로 복원하기 
+숫자 스트림을 만든 다음에, 원상태인 특화되지 않은 스트림으로 복원할 수 있을까? 
+
+예를 들어 IntStream은 기본형의 정수값만 만들 수 있다. IntStream의 map 연산은 'int를 인수로 받아서 int를 반환하는 람다'
+
+하지만 정수가 아닌 Dish 같은 다른 값을 반환하고 싶으면 어떻게 해야할까?
+
+그러려면 스트림 인터페이스에 정의된 일반적인 연산을 사용해야 한다.
+
+다음 예제처럼 boxed메서드를 이용해서 특화 스트림을 일반 스트림으로 변환할 수 있다. 
+
+``` java
+IntStream intStream = menu.stream().mapToInt(Dish::getCalories);
+StreamL<Integer> stream = intStream.boxed()
+```
+
+### 기본값 OptionalInt
+합계 예제에서는 0이라는 기본값이 있었으므로 별 문제가 없었다. 
+
+하지만 IntStream에서 최댓값을 찾을 때는 0이라는 기본값 때문에 잘못된 결과가 도출될 수 있다. 
+
+스트림에 요소가 없는 상황과 실제 최댓값이 0인 상황을 어떻게 구별할 수 있을까?
+
+OptionalInt, OptionalDouble, OptionalLong 세 가지 기본형 특화 스트림 버전도 제공한다. 
+
+다음처럼 OptionalInt를 이용해서 IntStream의 최댓값 요소를 찾을 수 있다. 
+``` java
+OptionalInt maxCalories = menu.stream()
+                              .mapToInt(Dish::getCalories)
+                              .max();
+```
+
+이제 OptionalInt를 이용해서 최댓값이 없는 상황에 사용할 기본값을 명시적으로 정의할 수 있다. 
+``` java
+int max = maxCalories.orElse(1); // 값이 없을 때 기본 최댓값을 명시적으로 설정
+```
+
+### 5.7.2 숫자 범위 
+1에서 100 사이의 숫자를 생성하려 한다고 가정하자. 
+
+자바 8의 IntStream과 LongStream에서는 range와 rangeClosed라는 두 가지 정적 메서드를 제공한다. 
+
+두 메서드 모두 첫 번째 인수로 시작값을, 두 번째 인수로 종료값을 갖는다. 
+
+range메서드는 시작값과 종료값이 결과에 포함되지 않는 반면 rangeClosed는 시작값과 종료값이 결과에 포함된다는 점이 다르다. 
+
+``` java
+IntStream evenNumbers = IntStream.rangeClosed(1, 100) // 1~100의 범위를 나타낸다. 
+                                 .filter(n -> n % 2 == 0) // 1~100까지의 짝수 스트림
+System.out.println(evenNumbers.count()); // 1~100까지에는 50개의 짝수가 있다. 
+```
+
+## 5.7.3 숫자 스트림 활용 : 피타고라스 수
+
+### 피타고라스 수
+피타고라스 수가 무엇인지 기억하고 있는가? 
+
+피타고라스는 a * a + b * b = c * c 공식을 만족하는 세 개의 정수(a,b,c)가 존재함이 발견했다. 
+
+피타고라스 수를 그림으로 그리면 직각 삼각형이 만들어진다. 
+
+### 세 수 표현하기 
+
+### 좋은 필터링 조합 
+``` java
+filter(b -> Math.sqrt(a*a + b*b) % 1 == 0)
+```
+
+### 집합 생성
+``` java
+stream.filter(b -> Math.sqrt(a*a + b*b) % 1 == 0)
+      .map( b -> new int[]{a, b, (int) Math.sqrt(a*a + b*b)});
+```
+
+### b값 생성 
+
+``` java
+IntStream.rangeClose(1, 100)
+         .filter(b-> Math.sqrt(a*a + b*b) % 1 == 0)
+         .boxed() 
+         .map(b -> new int[]{a, b, (int) Math.sqrt(a*a + b*b)});
+```
+filter연산 다음에 rangeClosed가 반환한 IntStream을 boxed를 이용해서 Stream<Integer>로 복원했다. 
+
+map은 스트림의 각 요소를 int 배열로 변환하기 때문이다. 
+
+개체값 스트림을 반환하는 IntStream의 mapToObj 메서드를 이용해서 이 코드를 재구현 할 수 있다. 
+
+``` java
+IntStream.rangeClose(1, 100)
+         .filter(b-> Math.sqrt(a*a + b*b) % 1 == 0)
+         .mapToObj(b -> new int[]{a, b, (int) Math.sqrt(a*a + b*b)});
+```
+
+### a값 생성
+
+``` java
+Stream<int[]> pythagoreanTriples = 
+    IntStream.rangeClosed(1, 100).boxed()
+             .flatMap( a -> 
+              IntStream.rangeClosed(a, 100) 
+                       .filter(b-> Math.sqrt(a*a + b*b) % 1 == 0)
+                       .mapToObj(b -> new int[]{a, b, (int) Math.sqrt(a*a + b*b)})
+                       );
+```
+
+### 코드 개선 
+``` java
+Stream<int[]> pythagoreanTriples = 
+    IntStream.rangeClosed(1, 100).boxed()
+             .flatMap( a -> 
+              IntStream.rangeClosed(a, 100) 
+                       .mapToObj(b -> new int[]{a, b, (int) Math.sqrt(a*a + b*b)})
+                       .filter( t-> t[2] % 1 == 0)
+                       );
+```
+
+
+## 5.8 스트림 만들기 
+### 5.8.1 값으로 스트림 만들기 
+임의의 수를 인수로 받는 정적 메서드 Stream.of를 이용해서 스트림을 만들 수 있다. 
+
+
+``` java
+Stream<String> stream = Stream.of("Modern ", "Java ", "In ", "Action");
+stream.map(String::toUpperCase).forEach(System.out::println);
+```
+
+``` java
+Stream<String> emptyStream = Stream.empty()
+```
+### 5.8.2 null이 될 수 있는 객체로 스트림 만들기 
 
 
 
+### 5.8.3 배열로 스트림 만들기 
+배열을 인수로 받는 정적 메서드 Arrays.stream을 이용해서 스트림을 만들 수 있다. 
 
-
+예를 들어 다음처럼 기본형 int로 이루어진 배열을 IntStream으로 변환할 수 있다. 
+``` java
+int[] numbers = {2, 3, 5, 7, 11, 13};
+int sum = Arrays.stream(numbers).sum();
+```
